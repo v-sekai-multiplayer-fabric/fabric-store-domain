@@ -5,12 +5,15 @@ The `standalone/` directory of
 commit `758dc2af51` — the HTN planner with no Elixir and no NIF in it. Header-only C++20, MIT,
 and the `LICENSE` beside this file is upstream's.
 
-That repository is the fabric's own fork of `taskweft/nif`, which is where the planner is
-written. The dependency stays inside the organisation: a fork can be synced deliberately and
-read when the network is somebody else's problem, and a build here does not rest on a
-repository nobody in the fabric can restore. Sync it before updating:
+That repository is the one this directory tracks, and it is inside the organisation on
+purpose: a build here does not rest on a repository nobody in the fabric can restore.
 
-    gh repo sync v-sekai-multiplayer-fabric/nif --source taskweft/nif
+It may or may not have an upstream of its own — today it does — and nothing here should be
+written as though the answer were fixed. Ask it, and sync it if it has one, before moving the
+pin:
+
+    gh repo view v-sekai-multiplayer-fabric/nif --json parent
+    gh repo sync v-sekai-multiplayer-fabric/nif
 
 Vendored rather than fetched, for the reason `store-plane` is: a repository that cannot build
 without cloning a second one is a note, not a repository. `git subtree` cannot take a
@@ -32,7 +35,11 @@ To update: copy `standalone/` over this directory again and change the commit ab
 here is patched, so there is nothing to reapply.
 
 **Nothing here is patched, and nothing here should be.** A fix to the planner is a pull
-request to `taskweft/nif`, which is where the planner is written and where every other tenant
-of it would want the fix. Editing a vendored copy makes the next sync a merge instead of a
-copy, and leaves the improvement stranded in one game. If a change here cannot wait for
-upstream, it belongs in `src/planner.cpp` — the domain — rather than in these headers.
+request to `v-sekai-multiplayer-fabric/nif`, and onward to that repository's own upstream if
+it has one — which is a question to ask it rather than to answer here, and the reason this
+paragraph names one repository instead of two. The planner is where every other tenant of it
+would want the fix.
+
+Editing a vendored copy makes the next sync a merge instead of a copy, and leaves the
+improvement stranded in one game. If a change cannot wait for the planner, it belongs in
+`src/planner.cpp` — the domain — rather than in these headers.

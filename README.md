@@ -6,6 +6,7 @@ what a caller can reach and what it cannot.
 | member | what it does | where it runs |
 | --- | --- | --- |
 | `queen` | the game, and the store's caller. A plane: a process with no networking. | here, in `src/` |
+| `taskweft` | the planner plane. The Queen's one decision, as an HTN domain over the ward. | here, in `src/planner.cpp` |
 | `fabric-store-plane` | SQLite over a VFS whose pages live in FoundationDB, on rivet's Depot layout | on its caller's machine |
 | FoundationDB | the pages, and every durable transaction. Below the planes, not one of them. | anywhere |
 | `versitygw` | the S3-compatible endpoint FoundationDB backs up to with `fdbbackup` | with FoundationDB |
@@ -64,6 +65,11 @@ read the contract board and choose for themselves, and she never takes a contrac
 like that is a state machine over days with nothing in the critical path to draw, which is
 the one game shape genuinely better as a database than as an engine.
 
+The Queen plans rather than sorts. Her decision is an HTN domain over the ward, from
+`v-sekai-multiplayer-fabric/nif`'s `standalone/` headers vendored into `thirdparty/taskweft`,
+and the Sparks still choose for themselves. The domain and why it is symbolic are in
+`src/planner.cpp`; `#3` is the issue and `rfd/0112` the decision.
+
 The setting is `rfd/0085`, so none of it is borrowed. Sparks are digitised people in rented
 Frames on a failing ring-station, and the antagonist is the Debt Clock — entropy and
 compound interest rather than a dark lord. The tension is that every scrip paid to the
@@ -102,6 +108,9 @@ else, and the container is the same `ubuntu-24.04` with the same FDB the workflo
 The FoundationDB packages land in a named volume, so only the first run downloads them. The
 build goes to `/build` inside the container rather than into the mounted tree, because the
 host's `build/` is not this one's.
+
+On a machine with rootless podman and no compose plugin, the same run is a quadlet:
+`ci/fabric-store-ci.container` documents itself.
 
 ## State
 

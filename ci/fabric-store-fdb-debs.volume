@@ -1,0 +1,3 @@
+# The FoundationDB client and server packages, kept between runs. The same thing
+# .github/workflows/ci.yml caches under ~/fdb-debs, and docker-compose.yml as a named volume.
+[Volume]

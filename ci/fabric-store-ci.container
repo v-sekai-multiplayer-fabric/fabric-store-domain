@@ -1,0 +1,39 @@
+# Oneshot rootless-podman quadlet that runs the whole of ci/inside.sh locally: an
+# ubuntu-24.04 with a live single-node FoundationDB, the same as .github/workflows/ci.yml.
+#
+# The repository goes in read-only. The build lands in /build inside the container, so a run
+# cannot write to the source tree at all — the host's build/ is not this one's.
+#
+#   cp ci/fabric-store-ci.container ci/fabric-store-fdb-debs.volume ~/.config/containers/systemd/
+#   systemctl --user daemon-reload
+#   systemctl --user start fabric-store-ci
+#   journalctl --user -u fabric-store-ci -f
+#
+# `Type=oneshot` with no RemainAfterExit, so `start` runs it again rather than deciding it has
+# already been started.
+[Unit]
+Description=fabric-store-domain CI: play a ward against a live FoundationDB (oneshot)
+
+[Container]
+Image=docker.io/library/ubuntu:24.04
+Exec=bash /repo/ci/inside.sh
+WorkingDir=/repo
+Volume=%h/Desktop/fabric-store-domain:/repo:ro
+# The FoundationDB debs are ~100 MB and do not change. Cached in a volume, so only the first
+# run downloads them.
+Volume=fabric-store-fdb-debs.volume:/root/fdb-debs
+Environment=FDB_VERSION=7.3.76
+Environment=WEFT_FDB_CLUSTER_FILE=/etc/foundationdb/fdb.cluster
+Environment=CI_MODE=play
+# Rather than `:z` on the repository mount: relabelling would change the host's own tree to
+# suit a container, and this one only needs to read it.
+SecurityLabelDisable=true
+
+[Service]
+Type=oneshot
+# The toolchain, FoundationDB, a build, and five games of two hundred cycles. It has room, but
+# it is still a bound: a run that hangs should fail rather than sit there.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=default.target

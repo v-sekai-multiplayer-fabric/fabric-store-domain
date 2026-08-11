@@ -28,6 +28,7 @@
 
 #define _POSIX_C_SOURCE 200809L
 
+#include "planner.h"
 #include "rng.h"
 
 #include <sqlite3.h>
@@ -76,6 +77,14 @@ int weft_txn_abort(unsigned long long txnid);
 #define SLICE_ENTITIES 64
 #define FIXED_ENTITIES (NVENUES + 1 + BOARD_SIZE + 3)
 #define SPARKS_PER_WARD (SLICE_ENTITIES - FIXED_ENTITIES)
+
+// How often somebody hears the Broadcast Row and comes. Slow enough that the Row is a long
+// investment rather than a switch, and on the cycle count rather than the RNG, so an arrival
+// is in the same place on a replay.
+#define ARRIVAL_CYCLES 12
+
+// How many Sparks the chronicle will name before it stops naming any of them.
+#define SPARKS_SHOWN 8
 
 typedef struct {
 	int64_t x, y, z;
@@ -234,6 +243,7 @@ typedef struct {
 	int retired; // every scrip paid to the Debt Clock
 	int spent;   // every scrip paid out of the ward for a venue
 	int ward_no; // which ward of the game this is, and the owner in a wire id
+	char prefix[64]; // what this ward's databases are called, so a Spark can still arrive later
 	uint64_t seed;
 	uint64_t seq; // counts what this ward has named, and feeds the UUIDs
 } gyre_t;
@@ -296,6 +306,41 @@ static sqlite3 *open_db(const char *name) {
 
 // ── Founding ──────────────────────────────────────────────────────────────────
 
+// One Spark, with a database of their own. This is founding for the eight the ward opens
+// with, and it is also arriving for the ones the Broadcast Row brings later — the same act
+// either way, which is the point of a Spark being a database rather than a row in one.
+//
+// A ward may not take more than its slice can carry. Beyond that the answer is a second ward,
+// not a fuller one.
+static int join_ward(gyre_t *g, int id) {
+	char name[128], sql[512];
+	if (g->nsparks >= MAX_SPARKS || g->nsparks >= SPARKS_PER_WARD) return 1;
+
+	snprintf(name, sizeof name, "%s-spark-%d.db", g->prefix, id);
+	spark_t *s = &g->sparks[g->nsparks];
+	s->id = id;
+	s->purse = 0;
+	s->wear = 0;
+	s->at = spark_home(id);
+	if (!(s->db = open_db(name))) return 1;
+	if (run(s->db, "DROP TABLE IF EXISTS spark; DROP TABLE IF EXISTS held;")) return 1;
+	if (run(s->db, "CREATE TABLE spark(id INT PRIMARY KEY, purse INT, wear INT, cycles INT,"
+	               "                   x INT, y INT, z INT, wire INT, owner INT);"
+	               "CREATE TABLE held(item TEXT PRIMARY KEY, kind TEXT, cycle INT)"))
+		return 1;
+	// A Spark's local part is its id, which is already unique across the whole game, so a
+	// Spark that migrates keeps the same local and only changes wards.
+	snprintf(sql, sizeof sql,
+	         "INSERT INTO spark VALUES (%d, 0, 0, 0, %" PRId64 ", %" PRId64 ", %" PRId64
+	         ", %u, %u)",
+	         id, s->at.x, s->at.y, s->at.z, wire_id(g->ward_no, WIRE_SPARK_BASE + (uint32_t)id),
+	         class_owner(CLASS_SPARK, g->ward_no));
+	if (run(s->db, sql)) return 1;
+
+	g->nsparks++;
+	return 0;
+}
+
 // `base` is the id of this ward's first Spark. A Spark keeps its id when it migrates, so the
 // ids have to be unique across every ward of the game rather than only inside one.
 static int found_ward(gyre_t *g, const char *prefix, int nsparks, uint64_t seed, int base) {
@@ -303,6 +348,7 @@ static int found_ward(gyre_t *g, const char *prefix, int nsparks, uint64_t seed,
 
 	snprintf(name, sizeof name, "%s-ward.db", prefix);
 	if (!(g->ward = open_db(name))) return 1;
+	snprintf(g->prefix, sizeof g->prefix, "%s", prefix);
 
 	// The ward's own number, settled before anything is named. It is the owner half of every
 	// wire id here and one of the facts a UUID is derived from, so a Spark that migrates keeps
@@ -360,30 +406,8 @@ static int found_ward(gyre_t *g, const char *prefix, int nsparks, uint64_t seed,
 	         g->debt, g->issued);
 	if (run(g->ward, sql)) return 1;
 
-	g->nsparks = nsparks > MAX_SPARKS ? MAX_SPARKS : nsparks;
-	for (int i = 0; i < g->nsparks; i++) {
-		const int id = base + i;
-		snprintf(name, sizeof name, "%s-spark-%d.db", prefix, id);
-		spark_t *s = &g->sparks[i];
-		s->id = id;
-		s->purse = 0;
-		s->wear = 0;
-		s->at = spark_home(id);
-		if (!(s->db = open_db(name))) return 1;
-		if (run(s->db, "DROP TABLE IF EXISTS spark; DROP TABLE IF EXISTS held;")) return 1;
-		if (run(s->db, "CREATE TABLE spark(id INT PRIMARY KEY, purse INT, wear INT, cycles INT,"
-		               "                   x INT, y INT, z INT, wire INT, owner INT);"
-		               "CREATE TABLE held(item TEXT PRIMARY KEY, kind TEXT, cycle INT)"))
-			return 1;
-		// A Spark's local part is its id, which is already unique across the whole game, so a
-		// Spark that migrates keeps the same local and only changes wards.
-		snprintf(sql, sizeof sql,
-		         "INSERT INTO spark VALUES (%d, 0, 0, 0, %" PRId64 ", %" PRId64 ", %" PRId64
-		         ", %u, %u)",
-		         id, s->at.x, s->at.y, s->at.z,
-		         wire_id(g->ward_no, WIRE_SPARK_BASE + (uint32_t)id),
-		         class_owner(CLASS_SPARK, g->ward_no));
-		if (run(s->db, sql)) return 1;
+	for (int i = 0; i < nsparks; i++) {
+		if (join_ward(g, base + i)) return 1;
 	}
 	return 0;
 }
@@ -394,32 +418,59 @@ static int found_ward(gyre_t *g, const char *prefix, int nsparks, uint64_t seed,
 // in the game this is shaped after, a monarch never swings a sword, and the interesting
 // question is which building to pay for while the debt compounds.
 //
-// The policy is a rule rather than a prompt, because a game that plays in CI has nobody to
-// ask. Build the cheapest thing not yet built, but never spend the ward down to where it
-// cannot pay its Sparks — an unpaid Spark leaves, and a ward with no Sparks earns nothing.
+// The policy is a plan rather than a prompt, because a game that plays in CI has nobody to
+// ask — and a plan rather than a sort, because sorting was what was wrong with it. This used
+// to walk `VENUES[]` and buy the first affordable thing, and that array is in price order, so
+// her whole game was a sort by cost standing where the game should have been.
+//
+// The ward now goes to an HTN planner as a state, and what comes back is the venue at the
+// head of a plan. `src/planner.cpp` holds the tasks and the methods. Every write below is
+// unchanged: the planner never touches a database, and the accounting was never the part
+// that was wrong.
 static int commission(gyre_t *g) {
-	// She keeps enough back to pay everyone for a cycle. A ward that cannot pay its Sparks
-	// loses them, and a ward with no Sparks earns nothing and owes the same.
-	const int reserve = 25 * g->nsparks;
-	for (int i = 0; i < NVENUES; i++) {
-		char sql[256];
-		snprintf(sql, sizeof sql, "SELECT built FROM venue WHERE id = %d", i);
-		if (scalar(g->ward, sql) != 0) continue;
-		if (g->treasury < VENUES[i].cost + reserve) continue;
+	char sql[256];
+	ward_view_t view;
+	memset(&view, 0, sizeof view);
 
-		g->treasury -= VENUES[i].cost;
-		// It leaves the ward. Somebody outside built the thing, and the scrip went with
-		// them: a venue is not a place to keep money, it is money turned into a place.
-		g->spent += VENUES[i].cost;
-		snprintf(sql, sizeof sql, "UPDATE venue SET built = %d WHERE id = %d", g->cycle, i);
-		if (run(g->ward, sql)) return -1;
-		snprintf(sql, sizeof sql,
-		         "INSERT INTO ledger(cycle, what, amount, spark) VALUES (%d, 'commission', %d, -1)",
-		         g->cycle, -VENUES[i].cost);
-		if (run(g->ward, sql)) return -1;
-		return i;
+	view.cycle = g->cycle;
+	view.treasury = g->treasury;
+	view.debt = g->debt;
+	view.nsparks = g->nsparks;
+	// She keeps enough back to pay everyone for a cycle. A ward that cannot pay its Sparks
+	// loses them, and a ward with no Sparks earns nothing and owes the same. It is a
+	// precondition of commissioning now rather than a `continue` in a loop, which is something
+	// a planner can reason around instead of something that silently skips.
+	view.reserve = 25 * g->nsparks;
+	view.room_to_grow = SPARKS_PER_WARD - g->nsparks;
+	for (int i = 0; i < NVENUES; i++) {
+		snprintf(sql, sizeof sql, "SELECT built FROM venue WHERE id = %d", i);
+		view.built[i] = scalar(g->ward, sql);
+		view.cost[i] = VENUES[i].cost;
 	}
-	return -1;
+	for (int i = 0; i < g->nsparks; i++) {
+		if (g->sparks[i].wear > view.worst_wear) view.worst_wear = g->sparks[i].wear;
+	}
+
+	int i = -1;
+	if (queen_plan(&view, &i)) {
+		// The planner could not answer at all. That is not a Queen who chose to wait, and
+		// letting it pass as one is how a game stops replaying with nobody the wiser.
+		fprintf(stderr, "cycle %d: the Queen could not plan\n", g->cycle);
+		return -2;
+	}
+	if (i < 0 || i >= NVENUES) return -1;
+
+	g->treasury -= VENUES[i].cost;
+	// It leaves the ward. Somebody outside built the thing, and the scrip went with
+	// them: a venue is not a place to keep money, it is money turned into a place.
+	g->spent += VENUES[i].cost;
+	snprintf(sql, sizeof sql, "UPDATE venue SET built = %d WHERE id = %d", g->cycle, i);
+	if (run(g->ward, sql)) return -1;
+	snprintf(sql, sizeof sql,
+	         "INSERT INTO ledger(cycle, what, amount, spark) VALUES (%d, 'commission', %d, -1)",
+	         g->cycle, -VENUES[i].cost);
+	if (run(g->ward, sql)) return -1;
+	return i;
 }
 
 static int built(gyre_t *g, int venue) {
@@ -561,7 +612,9 @@ static int cycle(gyre_t *g) {
 	char sql[256];
 	g->cycle++;
 
-	if (commission(g) < 0) { /* nothing affordable this cycle, which is most of them */ }
+	// -1 is a Queen who held, which is most cycles. -2 is a Queen who could not plan, and that
+	// stops the ward rather than passing for the same thing.
+	if (commission(g) == -2) return 1;
 	if (post_board(g)) return 1;
 
 	for (int i = 0; i < g->nsparks; i++) {
@@ -655,6 +708,23 @@ static int cycle(gyre_t *g) {
 		if (run(g->ward, sql)) return 1;
 	}
 
+	// Word gets out, and Sparks arrive. The Broadcast Row cost five hundred scrip and until now
+	// did nothing at all, which made it the one venue a Queen who reasons about value would
+	// never buy — and a rule that sorted by price bought it anyway, which is how it went so
+	// long without an effect.
+	//
+	// Somebody hears the Row and comes to the ward with an empty purse, so conservation is
+	// untouched: an arrival adds a database, not scrip. Arrivals are on the cycle count and
+	// draw nothing from the RNG, so the stream is where it was.
+	//
+	// It stops at the slice. That ceiling was a constant nobody reached; now it is the thing
+	// that ends the ward's growth, and past it the answer is a second ward.
+	if (built(g, 5) && g->nsparks < SPARKS_PER_WARD && g->cycle % ARRIVAL_CYCLES == 0) {
+		const int id = g->ward_no * SPARKS_PER_WARD + g->nsparks;
+		if (join_ward(g, id)) return 1;
+		printf("  cycle %d: word got out, and Spark %d arrived\n", g->cycle, id);
+	}
+
 	snprintf(sql, sizeof sql,
 	         "UPDATE ward SET cycle=%d, treasury=%d, debt=%d, issued=%d, retired=%d",
 	         g->cycle, g->treasury, g->debt, g->issued, g->retired);
@@ -696,13 +766,28 @@ static void chronicle(gyre_t *g) {
 	printf("\n  cycle %d of the ward\n", g->cycle);
 	printf("  treasury %d   debt %d   paid to the clock %d   built with %d   issued %d\n",
 	       g->treasury, g->debt, g->retired, g->spent, g->issued);
+	// In the order she paid for them, which is the Queen's decision made visible. A rule that
+	// sorted by price could only ever produce one order; a plan produces the order its methods
+	// argue for, and the difference is legible here and nowhere else.
 	printf("  venues:");
-	for (int i = 0; i < NVENUES; i++) {
-		if (built(g, i)) printf(" %s;", VENUES[i].name);
+	sqlite3_stmt *st;
+	if (sqlite3_prepare_v2(g->ward, "SELECT name FROM venue WHERE built > 0 ORDER BY built, id",
+	                       -1, &st, NULL) == SQLITE_OK) {
+		while (sqlite3_step(st) == SQLITE_ROW) printf(" %s;", sqlite3_column_text(st, 0));
+		sqlite3_finalize(st);
 	}
+	// Every Spark, or none of them and a note saying so. A list cut off at the first eight
+	// reads as the whole ward and is not one, and a ward that grows past eight is now the
+	// ordinary case rather than the exception — so the cut-off list would have been wrong more
+	// often than right, and wrong in the direction of looking correct.
 	printf("\n  sparks: ");
-	for (int i = 0; i < g->nsparks && i < 8; i++) {
-		printf("[%d purse %d wear %d] ", i, g->sparks[i].purse, g->sparks[i].wear);
+	if (g->nsparks > SPARKS_SHOWN) {
+		printf("%d of them, too many to list; they are in %s-spark-N.db\n", g->nsparks,
+		       g->prefix);
+		return;
+	}
+	for (int i = 0; i < g->nsparks; i++) {
+		printf("[%d purse %d wear %d] ", g->sparks[i].id, g->sparks[i].purse, g->sparks[i].wear);
 	}
 	printf("\n");
 }

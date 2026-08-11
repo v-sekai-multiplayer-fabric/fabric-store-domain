@@ -26,7 +26,12 @@ target_include_directories(weft_fdb_vfs PUBLIC
 target_compile_definitions(weft_fdb_vfs PUBLIC FDB_API_VERSION=730)
 target_link_libraries(weft_fdb_vfs PUBLIC ${FDB_LIBRARY} ${SQLITE_LIBRARY} Threads::Threads)
 
-add_executable(queen src/queen.c)
-target_include_directories(queen PRIVATE src)
+# `thirdparty/taskweft` is the planner: `v-sekai-multiplayer-fabric/nif`'s `standalone/`
+# headers, which are the HTN planner with no Elixir and no NIF in it. Header-only C++20, so
+# `queen` links headers rather than a runtime, and `src/planner.cpp` is the only translation
+# unit that sees them.
+add_executable(queen src/queen.c src/planner.cpp)
+target_include_directories(queen PRIVATE src thirdparty/taskweft)
 target_link_libraries(queen PRIVATE weft_fdb_vfs)
 target_compile_options(queen PRIVATE -Wall -Wextra)
+set_target_properties(queen PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)

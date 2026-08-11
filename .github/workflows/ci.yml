@@ -75,6 +75,15 @@ jobs:
           echo "$out"
           echo "$out" | grep -q "venues: .*Tavern" || {
             echo "the Queen never commissioned anything in 150 cycles"; exit 1; }
+          # And that she decided rather than sorted. `venues:` is in the order she paid, and
+          # the Rails cost 260 against the Tavern's 120, so Rails-before-Tavern is an order no
+          # sort by price can produce. It fails the moment the planner stops deciding.
+          echo "$out" | grep -q "venues:.*Transit Rails.*Cycle's End Tavern" || {
+            echo "the Tavern came before the Rails: she is sorting, not planning"; exit 1; }
+          # Word gets out, and Sparks arrive. Until the planner landed, the Broadcast Row was
+          # five hundred scrip for no effect at all.
+          echo "$out" | grep -q "arrived" || {
+            echo "the Broadcast Row brought nobody"; exit 1; }
 
       # A game too large for one subscriber's slice. Sixty Sparks is two wards, and the run
       # moves a Spark between them halfway through. The sum has to hold across both wards,

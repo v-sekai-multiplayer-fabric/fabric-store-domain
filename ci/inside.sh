@@ -58,6 +58,23 @@ echo "$out"
 echo "$out" | grep -q "venues: .*Tavern" || {
   echo "the Queen never commissioned anything in 150 cycles"; exit 1; }
 
+# And that she decided rather than sorted. `venues:` is in the order she paid, and the Rails
+# cost 260 against the Tavern's 120 — so Rails-before-Tavern is an order no sort by price can
+# produce. It is the one assertion that fails the moment the planner stops deciding, and it
+# caught exactly that: the first domain fell through to the cheap venue whenever the Rails were
+# unaffordable this cycle, and reproduced price order while looking like a plan.
+step "The Queen decided, rather than sorted"
+echo "$out" | grep -q "venues:.*Transit Rails.*Cycle's End Tavern" || {
+  echo "the Tavern came before the Rails, which is price order: she is sorting, not planning"
+  exit 1; }
+
+# Word gets out, and Sparks arrive. The Broadcast Row had no effect at all until now, which
+# made it the one venue a Queen who reasons about value would never buy.
+step "Word got out, and the ward grew"
+echo "$out" | grep -q "arrived" || {
+  echo "the Broadcast Row brought nobody, so it is still five hundred scrip for nothing"
+  exit 1; }
+
 # A game too large for one subscriber's slice. 60 Sparks is two wards, and the run moves one
 # Spark between them halfway through. The sum has to hold across both wards, which is the
 # part a migration is able to break.

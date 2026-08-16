@@ -1,6 +1,6 @@
-# service-store
+# datasource-queen
 
-Durable state. A **domain** is a packing of planes and edge planes, and this one is packed by
+Durable state. A **data source** implements a repository, and this one is packed by
 what a caller can reach and what it cannot.
 
 | member | what it does | where it runs |

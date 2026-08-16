@@ -1,7 +1,7 @@
-# fabric-store-domain
+# datasource-queen
 
-This repository holds two planes. `queen` is a settlement game. The store plane is SQLite on a
-VFS that keeps its pages in FoundationDB. The two planes link into one process.
+This repository holds two processes. `queen` is a settlement game. The data source is SQLite on a
+VFS that keeps its pages in FoundationDB. The two link into one process.
 
 `README.md` gives the design. The comments in `src/queen.c` give the reasons. Record decisions
 in the `multiplayer-fabric-manuals` repository.

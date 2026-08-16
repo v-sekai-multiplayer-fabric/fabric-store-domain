@@ -7,7 +7,7 @@ what a caller can reach and what it cannot.
 | --- | --- | --- |
 | `queen` | the game, and the store's caller. A plane: a process with no networking. | here, in `src/` |
 | `taskweft` | the planner plane. The Queen's one decision, as an HTN domain over the ward. | here, in `src/planner.cpp` |
-| `fabric-store-plane` | SQLite over a VFS whose pages live in FoundationDB, on rivet's Depot layout | on its caller's machine |
+| `datasource-store` | SQLite over a VFS whose pages live in FoundationDB, on rivet's Depot layout | on its caller's machine |
 | FoundationDB | the pages, and every durable transaction. Below the planes, not one of them. | anywhere |
 | `versitygw` | the S3-compatible endpoint FoundationDB backs up to with `fdbbackup` | with FoundationDB |
 
@@ -26,7 +26,7 @@ holds them to their arithmetic, so the domain has a workload that runs on every 
 
 **Not deployed.** There is no Fly machine definition yet for FoundationDB and versitygw, and
 that is the only part of this with a machine of its own, since the plane ships with whatever
-calls it. `fabric-store-plane#17` tracks it.
+calls it. `datasource-store#17` tracks it.
 
 ## The design
 
@@ -34,6 +34,6 @@ calls it. `fabric-store-plane#17` tracks it.
 holds no local file, what this is not, the `queen` tenant and why a game is the right one, and
 how to run CI here. `rfd/0085` is the setting and `rfd/0112` the planner decision.
 
-This README and `service-physics`'s carried the same 114 lines. That copy is gone from
-`service-physics`, which is a clone that has not been written yet, and this is the one place
+This README and `interactor-ward`'s carried the same 114 lines. That copy is gone from
+`interactor-ward`, which is a clone that has not been written yet, and this is the one place
 those sections live.

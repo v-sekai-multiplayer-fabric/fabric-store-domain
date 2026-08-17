@@ -1,3 +1,6 @@
 # antlr4, which FuzzTest pulls in, insists on writing its runtime beside the CMakeLists
 # that configured it. Nothing here is built by hand into the source tree.
 test/dist/
+
+# Finder leaves these on macOS.
+.DS_Store

@@ -119,7 +119,7 @@ Do not propose `webtransportd`. The Queen terminates QUIC in her own process.
 | Path                       | Source                                        |
 | -------------------------- | --------------------------------------------- |
 | `thirdparty/store-plane`   | `datasource-store`                          |
-| `thirdparty/gateway-edge`  | `transport-gateway`                         |
+| `thirdparty/gateway-edge`  | `transport-gateway-c`                         |
 | `thirdparty/taskweft`      | `nif`, the `standalone/` headers              |
 
 Vendor only from a `v-sekai-multiplayer-fabric` repository. A vendored copy MUST be

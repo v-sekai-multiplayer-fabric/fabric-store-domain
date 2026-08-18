@@ -1,0 +1,65 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "datasource-queen: durable state, SQLite on a VFS whose pages live in FoundationDB"
+abstract: >
+  Durable state, packed by what a caller can reach and what it cannot. The queen is
+  the game and the store's caller, a plane with no networking; the planner plane is
+  the Queen's one decision, as an HTN domain over the ward; and below both is SQLite
+  over a VFS whose pages are FoundationDB transactions, so no client ever opens a
+  database and authority never moves. CI plays two wards on two seeds against a live
+  FoundationDB and holds them to their arithmetic, so the domain has a workload that
+  runs on every push rather than a claim that it would.
+authors:
+  - family-names: Lee
+    given-names: "K. S. Ernest (iFire)"
+    email: ernest.lee@chibifire.com
+    orcid: "https://orcid.org/0000-0003-4570-1436"
+version: 0.1.0-dev.1
+date-released: "2026-08-17"
+license: MIT
+repository-code: "https://github.com/v-sekai-multiplayer-fabric/datasource-queen"
+keywords:
+  - sqlite
+  - foundationdb
+  - htn-planning
+  - durable-state
+references:
+
+  - type: software
+    title: "FoundationDB"
+    authors:
+      - name: "Apple Inc. and the FoundationDB project authors"
+    url: "https://github.com/apple/foundationdb"
+    notes: >
+      Every durable transaction, and the pages themselves. Below the planes rather than
+      one of them. The fabric's pinned fork is datasource-foundationdb.
+
+  - type: software
+    title: "SQLite"
+    authors:
+      - name: "D. Richard Hipp and the SQLite developers"
+    url: "https://sqlite.org/"
+    notes: >
+      The query surface, reached only through a custom VFS. What is borrowed is the
+      language and the file format's page discipline; what is replaced is the file.
+
+  - type: software
+    title: "interactor-taskweft: the planner plane"
+    authors:
+      - family-names: Lee
+        given-names: "K. S. Ernest (iFire)"
+    url: "https://github.com/v-sekai-multiplayer-fabric/interactor-taskweft"
+    notes: "Vendored at thirdparty/taskweft. The HTN planner src/planner.cpp states its domain against."
+
+  - type: software
+    title: "contract-bus: the weft plane harness"
+    authors:
+      - family-names: Lee
+        given-names: "K. S. Ernest (iFire)"
+    url: "https://github.com/v-sekai-multiplayer-fabric/contract-bus"
+    notes: "Vendored at thirdparty/, with the store-plane and gateway-edge members beside it."
+
+  - type: software
+    title: "versitygw: an S3-compatible gateway"
+    url: "https://github.com/versity/versitygw"
+    notes: "The endpoint fdbbackup writes to. Backup is a different durability question from the pages, and it is answered outside the cluster."
